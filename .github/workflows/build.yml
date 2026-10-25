@@ -23,8 +23,19 @@ jobs:
       - name: Build
         run: ./gradlew build --stacktrace
 
-      - name: Upload mod jar
-        uses: actions/upload-artifact@v4
-        with:
-          name: More-QoL
-          path: build/libs/*.jar
+      - name: Check mixin targets against Minecraft 26.2
+        run: |
+          JARS=$(find ~/.gradle/caches .gradle -name '*.jar' 2>/dev/null | grep -E 'minecraft-(merged|client|common|clientOnly)[^/]*\.jar$' | grep -v sources | sort -u)
+          echo "::notice title=MC jars::$(echo "$JARS" | tr '\n' ' ')"
+          CP=$(echo "$JARS" | paste -sd: -)
+          check() {
+            out=$(javap -p -cp "$CP" "$1" 2>&1 | grep -E "$2" | sed 's/^ *//')
+            [ -z "$out" ] && out="NOTHING FOUND"
+            echo "::notice title=$1::$(printf '%s' "$out" | sed ':a;N;$!ba;s/\n/%0A/g')"
+          }
+          check 'net.minecraft.client.gui.screens.inventory.AbstractContainerScreen' 'keyPressed|checkHotbarKeyPressed|hoveredSlot|slotClicked|[ .]menu;|getHoveredSlot|mouseDragged|extractSlot'
+          check 'net.minecraft.client.renderer.blockentity.BeaconRenderer' ' submit\('
+          check 'net.minecraft.client.multiplayer.ClientLevel$ClientLevelData' 'gameTime|getGameTime'
+          check 'net.minecraft.world.entity.player.Inventory' ' items;|getFreeSlot'
+          check 'net.minecraft.client.multiplayer.MultiPlayerGameMode' 'Minecraft minecraft|startDestroyBlock|void attack\('
+          check 'net.minecraft.client.Options' ' gamma\(|genericValueLabel'
